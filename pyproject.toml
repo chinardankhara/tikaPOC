@@ -1,0 +1,17 @@
+[project]
+name = "tikapoc"
+version = "0.1.0"
+description = "Topic search multi-turn AI agent for scientists"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.32.3",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+    "python-dotenv>=1.0.0",
+    "transformers>=4.47.1",
+    "torch>=2.5.1",
+    "optimum>=1.23.3",
+    "numpy>=2.2.1",
+    "tqdm>=4.67.1",
+]
