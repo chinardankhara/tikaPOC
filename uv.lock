@@ -971,14 +971,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy" },
-    { name = "optimum" },
+    { name = "numpy", specifier = ">=2.2.1" },
+    { name = "optimum", specifier = ">=1.23.3" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "torch" },
-    { name = "tqdm" },
+    { name = "torch", specifier = ">=2.5.1" },
+    { name = "tqdm", specifier = ">=4.67.1" },
     { name = "transformers", specifier = ">=4.47.1" },
 ]
 
