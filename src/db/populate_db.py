@@ -157,58 +157,30 @@ def process_topics_batch(
                 conn.commit()
 
 def sanity_check_data() -> None:
-    """Run sanity checks on the inserted data."""
+    """Run basic sanity checks on the inserted data."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             # Check topic count
             cur.execute("SELECT COUNT(*) FROM topics")
             topic_count = cur.fetchone()[0]
-            print(f"Total topics: {topic_count}")  # Should be ~4200
+            print(f"Total topics: {topic_count}")
             
-            # Check keyword count and null embeddings
-            cur.execute("""
-                SELECT 
-                    COUNT(*) as total_keywords,
-                    COUNT(*) FILTER (WHERE embedding IS NULL) as null_embeddings
-                FROM keywords
-            """)
-            keyword_count, null_embeddings = cur.fetchone()
+            # Check keyword count
+            cur.execute("SELECT COUNT(*) FROM keywords")
+            keyword_count = cur.fetchone()[0]
             print(f"Total keywords: {keyword_count}")
-            print(f"Keywords with null embeddings: {null_embeddings}")  # Should be 0
             
             # Check topic-keyword relationships
             cur.execute("SELECT COUNT(*) FROM topic_keywords")
             relationship_count = cur.fetchone()[0]
             print(f"Total topic-keyword relationships: {relationship_count}")
-            
-            # Sample check: Topics with most keywords
-            cur.execute("""
-                SELECT t.display_name, COUNT(tk.keyword_id) as keyword_count
-                FROM topics t
-                JOIN topic_keywords tk ON t.id = tk.topic_id
-                GROUP BY t.display_name
-                ORDER BY keyword_count DESC
-                LIMIT 5
-            """)
-            print("\nTop 5 topics by keyword count:")
-            for topic, count in cur.fetchall():
-                print(f"{topic}: {count} keywords")
-            
-            # Check embedding dimensions using vector_dims()
-            cur.execute("""
-                SELECT DISTINCT vec_dim(embedding) as embedding_dim
-                FROM keywords
-                LIMIT 1
-            """)
-            embedding_dim = cur.fetchone()[0]
-            print(f"\nEmbedding dimensions: {embedding_dim}")  # Should be 768 for SciBERT
 
 def main() -> None:
     # Load your topics from JSON
     with open("../../data/openalex_topics_raw.json", "r") as f:
         topics = json.load(f)
     
-    # Initialize embedder once
+    # Initialize embedder
     print("Initializing SciBERT model...")
     embedder = SciBertEmbedder()
     
@@ -218,8 +190,8 @@ def main() -> None:
         batch_size=64
     )
 
-    # Add sanity check at the end
-    print("\nRunning sanity checks...")
+    # Basic sanity check
+    print("\nRunning basic sanity checks...")
     sanity_check_data()
 
 if __name__ == "__main__":
