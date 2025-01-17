@@ -1,8 +1,13 @@
 from typing import List, Dict, Any, Set
 import numpy as np
-from psycopg2.extras import execute_values
+import psycopg2
+from psycopg2.extensions import connection
+# from psycopg2.extras import execute_values
 import torch
 from transformers import AutoTokenizer, AutoModel
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TopicSearcher:
     def __init__(self) -> None:
@@ -47,7 +52,6 @@ class TopicSearcher:
         Returns:
             List of topic dictionaries with id, display_name, and description
         """
-        from src.db.connection import get_db_connection
         
         # Get query embedding
         query_embedding = self.get_embedding(query)
@@ -114,3 +118,29 @@ class TopicSearcher:
                 ]
                 
                 return results
+
+def get_db_connection() -> connection:
+    """
+    Create a database connection using environment variables.
+    
+    Required environment variables:
+    - DB_HOST: Database host
+    - DB_NAME: Database name
+    - DB_USER: Database user
+    - DB_PASSWORD: Database password
+    - DB_PORT: Database port (default: 5432)
+    
+    Returns:
+        psycopg2 connection object
+    """
+    try:
+        conn = psycopg2.connect(
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            port=os.getenv("DB_PORT", "5432")
+        )
+        return conn
+    except Exception as e:
+        raise ConnectionError(f"Failed to connect to database: {str(e)}") 
