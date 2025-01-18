@@ -1,19 +1,25 @@
 from typing import Dict, List, Any
 from openai import AzureOpenAI
 import os
-from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 from .topic_agent import TopicAgent
 
-load_dotenv()
+# Set up Key Vault client
+vault_url = "https://tikasecrets.vault.azure.net/"
+credential = DefaultAzureCredential()
+secret_client = SecretClient(vault_url=vault_url, credential=credential)
 
 class ChatManager:
     def __init__(self) -> None:
         """Initialize chat manager with OpenAI client and topic agent."""
         self.client = AzureOpenAI(
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_KEY"),
-            api_version="2024-02-15-preview"
+            azure_endpoint=secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value,
+            api_key=secret_client.get_secret("AZURE-OPENAI-KEY").value,
+            api_version="2024-12-01-preview"
         )
+        self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
+        print(f"Using OpenAI deployment: {self.deployment}")
         self.topic_agent = TopicAgent()
         
     def _format_topics(self, topics: List[Dict[str, Any]]) -> str:
@@ -31,13 +37,20 @@ class ChatManager:
             }
         ]
         
-        response = self.client.chat.completions.create(
-            model=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-            messages=messages,
-            temperature=0.7
-        )
-        
-        return response.choices[0].message.content.strip()
+        try:
+            response = self.client.chat.completions.create(
+                model=self.deployment,  # Use the deployment name from Key Vault
+                messages=messages,
+                temperature=0.3
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"OpenAI API error: {str(e)}")
+            # Fallback to simple formatting if API fails
+            return "\n".join([
+                f"Topic {i+1}: {topic['display_name']}\n{topic['description']}"
+                for i, topic in enumerate(topics)
+            ])
     
     def handle_message(self, user_message: str) -> str:
         """

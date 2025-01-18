@@ -5,8 +5,13 @@ from collections import deque
 from openai import AzureOpenAI
 from .topic_search import TopicSearcher
 from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
-load_dotenv()
+# Set up Key Vault client
+vault_url = "https://tikasecrets.vault.azure.net/"
+credential = DefaultAzureCredential()
+secret_client = SecretClient(vault_url=vault_url, credential=credential)
 
 @dataclass
 class AgentState:
@@ -20,20 +25,18 @@ class TopicAgent:
         self.state = AgentState()
         self.searcher = TopicSearcher()
         self.client = AzureOpenAI(
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_KEY"),
+            azure_endpoint=secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value,
+            api_key=secret_client.get_secret("AZURE-OPENAI-KEY").value,
             api_version="2024-12-01-preview"
         )
+        self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
         
     def _rewrite_query(self) -> str:
         """
         Rewrite the query using context from recent queries.
         Only called when there are multiple queries in history.
         """
-        # Convert deque to list for better prompt formatting
         query_history = list(self.state.recent_queries)
-        
-        # Debug print
         print(f"Query history before rewrite: {query_history}")
         
         messages = [
@@ -42,12 +45,7 @@ class TopicAgent:
                 "content": """You are a query rewriting assistant. Given a sequence of user queries, 
                 rewrite them into a single, comprehensive query that captures the user's evolving intent. 
                 Focus on creating a search-friendly query that works well with embedding-based search.
-                Return ONLY the rewritten query, nothing else.
-                
-                Example:
-                Queries: ["machine learning", "healthcare applications"]
-                Output: "machine learning applications in healthcare and medical diagnosis"
-                """
+                Return ONLY the rewritten query, nothing else."""
             },
             {
                 "role": "user",
@@ -58,16 +56,20 @@ class TopicAgent:
             }
         ]
         
-        response = self.client.chat.completions.create(
-            model=os.getenv("AZURE_OPENAI_DEPLOYMENT"),
-            messages=messages,
-            temperature=0.3,  # Lower temperature for more focused rewrites
-            max_tokens=100    # Rewritten query should be concise
-        )
-        
-        rewritten = response.choices[0].message.content.strip()
-        print(f"Rewritten query: {rewritten}")  # Debug print
-        return rewritten
+        try:
+            response = self.client.chat.completions.create(
+                model=self.deployment,  # Use deployment from Key Vault
+                messages=messages,
+                temperature=0.3,
+                max_tokens=100
+            )
+            rewritten = response.choices[0].message.content.strip()
+            print(f"Rewritten query: {rewritten}")
+            return rewritten
+        except Exception as e:
+            print(f"OpenAI API error in query rewriting: {str(e)}")
+            # Fallback to using the latest query if rewriting fails
+            return query_history[-1]
     
     def process_query(self, user_input: str) -> List[Dict[str, Any]]:
         """

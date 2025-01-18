@@ -2,12 +2,18 @@ from typing import List, Dict, Any, Set
 import numpy as np
 import psycopg2
 from psycopg2.extensions import connection
-# from psycopg2.extras import execute_values
 import torch
 from transformers import AutoTokenizer, AutoModel
 import sys
 import os
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Set up Key Vault client
+vault_url = "https://tikasecrets.vault.azure.net/"
+credential = DefaultAzureCredential()
+secret_client = SecretClient(vault_url=vault_url, credential=credential)
 
 class TopicSearcher:
     def __init__(self) -> None:
@@ -121,26 +127,41 @@ class TopicSearcher:
 
 def get_db_connection() -> connection:
     """
-    Create a database connection using environment variables.
-    
-    Required environment variables:
-    - DB_HOST: Database host
-    - DB_NAME: Database name
-    - DB_USER: Database user
-    - DB_PASSWORD: Database password
-    - DB_PORT: Database port (default: 5432)
-    
-    Returns:
-        psycopg2 connection object
+    Create a database connection using secrets from Azure Key Vault.
     """
     try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            database=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", "5432")
-        )
-        return conn
+        # First try to get all secrets
+        try:
+            host = secret_client.get_secret("DB-HOST").value
+            db_name = secret_client.get_secret("DATABASE-NAME").value
+            user = secret_client.get_secret("DB-USER").value
+            password = secret_client.get_secret("DB-PASSWORD").value
+            port = secret_client.get_secret("DB-PORT").value
+        except Exception as e:
+            print(f"Failed to retrieve secrets from Key Vault: {str(e)}")
+            raise
+
+        print("Retrieved connection details:")
+        print(f"Host: {host}")
+        print(f"Database Name: {db_name}")  # Let's explicitly see the database name
+        print(f"User: {user}")
+        print(f"Port: {port}")
+        
+        # Now try to connect
+        try:
+            conn = psycopg2.connect(
+                host=host,
+                database=db_name,
+                user=user,
+                password=password,
+                port=port
+            )
+            print("Connection successful!")
+            return conn
+        except psycopg2.Error as e:
+            print(f"PostgreSQL Error: {e.pgcode} - {e.pgerror}")
+            raise
+            
     except Exception as e:
+        print(f"Connection error details: {type(e).__name__}: {str(e)}")
         raise ConnectionError(f"Failed to connect to database: {str(e)}") 

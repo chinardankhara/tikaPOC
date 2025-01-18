@@ -12,7 +12,7 @@ def initialize_session_state():
         st.session_state.messages = []
 
 def main():
-    st.title("Research Topic Explorer")
+    st.title("Socratic RAG Agent")
     
     # Initialize session state
     initialize_session_state()
