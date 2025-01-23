@@ -16,7 +16,7 @@ A research topic exploration tool powered by Azure OpenAI and vector similarity 
 
 ### Prerequisites
 - Python 3.8 or higher
-- Azure CLI
+- Azure CLI.  Install from https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
 - Azure subscription with OpenAI access
 
 ### a. Azure Authentication
