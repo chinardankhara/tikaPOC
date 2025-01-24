@@ -18,6 +18,8 @@ A research topic exploration tool powered by Azure OpenAI and vector similarity 
 - Python 3.8 or higher
 - Azure CLI.  Install from https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
 - Azure subscription with OpenAI access
+- **SSL Certificates for Azure PostgreSQL:** Make sure you have installed the **recommended SSL certificates** to secure connections to **our dedicated Azure PostgreSQL server**. These certificates adhere to general industry standards and are **not specific to this project**. For detailed instructions, refer to the [Azure PostgreSQL SSL/TLS Documentation](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-networking-ssl-tls).
+- **Azure Subscription Access:** To utilize our Azure Subscription ID `0bdb7994-618e-43ab-9dc4-e5510263d104`, you must obtain access through **Professor Lew Lefton**. Please request access by visiting the [Cloudbank Billing Account Access](https://www.cloudbank.org/billing-account-access) portal or by contacting Professor Lew Lefton directly at [lew.lefton@gatech.edu](mailto:lew.lefton@gatech.edu).
 
 ### a. Azure Authentication
 ```bash
