@@ -23,15 +23,17 @@ A research topic exploration tool powered by Azure OpenAI and vector similarity 
 
 ### a. Azure Authentication
 ```bash
-# Login to Azure
+# Login to Azure - Be sure to use the account from cloudbank.org
 az login
 
 # Set the correct subscription
 az account set --subscription 0bdb7994-618e-43ab-9dc4-e5510263d104
 ```
 
-### b. Install Dependencies
+### b. Create a Virtual Environment and Install Dependencies
 ```bash
+python3 -m venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
