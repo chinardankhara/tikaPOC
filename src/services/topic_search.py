@@ -22,10 +22,16 @@ class TopicSearcher:
         self.model = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
         self.model.eval()  # Set to evaluation mode
 
-    def get_embedding(self, text: str) -> np.ndarray:
-        """Get embedding for a single text string."""
+    def get_embedding(self, text: str, topic_name: str = None) -> np.ndarray:
+        """Get embedding for a text string, optionally prefixed with topic."""
+        if topic_name:
+            # Format: "TOPIC: keyword" to create contextual embeddings
+            text_to_embed = f"{topic_name}: {text}"
+        else:
+            text_to_embed = text
+            
         inputs = self.tokenizer(
-            text,
+            text_to_embed,
             return_tensors="pt",
             max_length=768,
             truncation=True,
@@ -34,7 +40,6 @@ class TopicSearcher:
         
         with torch.no_grad():
             outputs = self.model(**inputs)
-            # Use CLS token embedding
             embedding = outputs.last_hidden_state[0, 0, :].numpy()
         
         return embedding
@@ -43,85 +48,115 @@ class TopicSearcher:
         self,
         query: str,
         excluded_topic_ids: Set[str] = set(),
-        n_similar_keywords: int = 10,
+        n_similar: int = 20,
         n_topics: int = 3
     ) -> List[Dict[str, Any]]:
-        """
-        Search for topics based on query, excluding specified topic IDs.
-        
-        Args:
-            query: Search query
-            excluded_topic_ids: Set of topic IDs to exclude
-            n_similar_keywords: Number of similar keywords to consider
-            n_topics: Number of topics to return
-            
-        Returns:
-            List of topic dictionaries with id, display_name, and description
-        """
-        
-        # Get query embedding
+        """Search using hybrid approach combining dense vectors and keyword matching."""
         query_embedding = self.get_embedding(query)
+        
+        # Debug print
+        print(f"Query: {query}")
+        print(f"Embedding shape: {query_embedding.shape}")
+        print(f"Embedding sample: {query_embedding[:5]}")
+        
+        search_query = """
+        WITH vector_scores AS (
+            SELECT 
+                t.id,
+                t.display_name,
+                t.description,
+                k.keyword,
+                1.0 - (k.embedding <=> %s::vector) as vector_similarity,  -- Convert distance to similarity
+                ROW_NUMBER() OVER (PARTITION BY t.id ORDER BY k.embedding <=> %s::vector) as dense_rank
+            FROM keywords k
+            JOIN topics t ON k.topic_id = t.id
+            WHERE t.id != ALL(%s)
+        ),
+        keyword_scores AS (
+            SELECT 
+                t.id,
+                t.display_name,
+                t.description,
+                k.keyword,
+                similarity(k.keyword, %s) as keyword_similarity,
+                ROW_NUMBER() OVER (PARTITION BY t.id ORDER BY similarity(k.keyword, %s) DESC) as keyword_rank
+            FROM keywords k
+            JOIN topics t ON k.topic_id = t.id
+            WHERE t.id != ALL(%s)
+        ),
+        combined_scores AS (
+            SELECT 
+                v.id,
+                v.display_name,
+                v.description,
+                v.keyword as matching_keyword,
+                -- Weighted combination of scores
+                (v.vector_similarity * 0.7 + k.keyword_similarity * 0.3) as combined_score,
+                v.vector_similarity,
+                k.keyword_similarity
+            FROM vector_scores v
+            JOIN keyword_scores k ON v.id = k.id
+            WHERE v.dense_rank = 1 AND k.keyword_rank = 1
+        )
+        SELECT 
+            id,
+            display_name,
+            description,
+            matching_keyword,
+            combined_score,
+            vector_similarity,
+            keyword_similarity
+        FROM combined_scores
+        ORDER BY combined_score DESC
+        LIMIT %s
+        """
+        
+        query_params = (
+            query_embedding.tolist(),
+            query_embedding.tolist(),
+            list(excluded_topic_ids) if excluded_topic_ids else [],
+            query,
+            query,
+            list(excluded_topic_ids) if excluded_topic_ids else [],
+            n_topics
+        )
         
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Using a CTE for clarity and efficiency
-                cur.execute(
-                    """
-                    WITH similar_keywords AS (
-                        -- Find similar keywords
-                        SELECT 
-                            k.keyword,
-                            k.id as keyword_id,
-                            embedding <=> %s::vector as similarity
-                        FROM keywords k
-                        ORDER BY similarity
-                        LIMIT %s
-                    ),
-                    topic_scores AS (
-                        -- Get topics and their scores
-                        SELECT 
-                            t.id,
-                            t.display_name,
-                            t.description,
-                            COUNT(DISTINCT sk.keyword_id) as matching_keywords,
-                            AVG(sk.similarity) as avg_similarity
-                        FROM similar_keywords sk
-                        JOIN topic_keywords tk ON sk.keyword_id = tk.keyword_id
-                        JOIN topics t ON tk.topic_id = t.id
-                        WHERE t.id != ALL(%s)  -- Exclude specified topics
-                        GROUP BY t.id, t.display_name, t.description
-                    )
-                    -- Final ranking and selection
-                    SELECT 
-                        id,
-                        display_name,
-                        description,
-                        matching_keywords,
-                        avg_similarity
-                    FROM topic_scores
-                    ORDER BY 
-                        matching_keywords DESC,
-                        avg_similarity ASC
-                    LIMIT %s
-                    """,
-                    (
-                        query_embedding.tolist(),
-                        n_similar_keywords,
-                        list(excluded_topic_ids) if excluded_topic_ids else [],
-                        n_topics
-                    )
-                )
+                # First, let's check what we're working with
+                cur.execute("SELECT COUNT(*) FROM keywords WHERE embedding IS NOT NULL")
+                embedding_count = cur.fetchone()[0]
+                print(f"Number of embeddings in database: {embedding_count}")
+                
+                # Execute with EXPLAIN ANALYZE
+                cur.execute("EXPLAIN ANALYZE " + search_query, query_params)
+                print("\nQuery Plan:")
+                for line in cur.fetchall():
+                    print(line[0])
+                
+                # Execute actual query
+                cur.execute(search_query, query_params)
                 
                 results = [
                     {
                         "id": row[0],
                         "display_name": row[1],
                         "description": row[2],
-                        "matching_keywords": row[3],
-                        "similarity_score": float(row[4])
+                        "matching_keyword": row[3],
+                        "score": float(row[4]),
+                        "vector_similarity": float(row[5]),
+                        "keyword_similarity": float(row[6])
                     }
                     for row in cur.fetchall()
                 ]
+                
+                # Debug print results
+                print("\nSearch Results:")
+                for r in results:
+                    print(f"Topic: {r['display_name']}")
+                    print(f"Vector Similarity: {r['vector_similarity']}")
+                    print(f"Keyword Similarity: {r['keyword_similarity']}")
+                    print(f"Combined Score: {r['score']}\n")
                 
                 return results
 
