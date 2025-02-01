@@ -126,13 +126,9 @@ class TopicSearcher:
                 # First, let's check what we're working with
                 cur.execute("SELECT COUNT(*) FROM keywords WHERE embedding IS NOT NULL")
                 embedding_count = cur.fetchone()[0]
-                print(f"Number of embeddings in database: {embedding_count}")
                 
                 # Execute with EXPLAIN ANALYZE
-                cur.execute("EXPLAIN ANALYZE " + search_query, query_params)
-                print("\nQuery Plan:")
-                for line in cur.fetchall():
-                    print(line[0])
+                cur.execute(search_query, query_params)
                 
                 # Execute actual query
                 cur.execute(search_query, query_params)
