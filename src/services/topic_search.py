@@ -8,6 +8,7 @@ import sys
 import os
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+import streamlit as st
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Set up Key Vault client
@@ -16,11 +17,12 @@ credential = DefaultAzureCredential()
 secret_client = SecretClient(vault_url=vault_url, credential=credential)
 
 class TopicSearcher:
-    def __init__(self) -> None:
+    def __init__(self, use_streamlit_secrets=False) -> None:
         """Initialize the searcher with SciBERT model."""
         self.tokenizer = AutoTokenizer.from_pretrained("allenai/scibert_scivocab_uncased")
         self.model = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
         self.model.eval()  # Set to evaluation mode
+        self.use_streamlit_secrets = use_streamlit_secrets
 
     def get_embedding(self, text: str, topic_name: str = None) -> np.ndarray:
         """Get embedding for a text string, optionally prefixed with topic."""
@@ -121,7 +123,7 @@ class TopicSearcher:
             n_topics
         )
         
-        with get_db_connection() as conn:
+        with get_db_connection(self.use_streamlit_secrets) as conn:
             with conn.cursor() as cur:
                 # First, let's check what we're working with
                 cur.execute("SELECT COUNT(*) FROM keywords WHERE embedding IS NOT NULL")
@@ -156,43 +158,44 @@ class TopicSearcher:
                 
                 return results
 
-def get_db_connection() -> connection:
+def get_db_connection(use_streamlit_secrets=False) -> connection:
     """
-    Create a database connection using secrets from Azure Key Vault.
+    Create a database connection using secrets from Azure Key Vault or Streamlit secrets.
     """
     try:
-        # First try to get all secrets
-        try:
+        # Get database credentials
+        if use_streamlit_secrets:
+            # Use Streamlit secrets for cloud deployment
+            import streamlit as st
+            host = st.secrets["DB_HOST"]
+            db_name = st.secrets["DATABASE_NAME"]
+            user = st.secrets["DB_USER"]
+            password = st.secrets["DB_PASSWORD"]
+            port = st.secrets["DB_PORT"]
+        else:
+            # Use Azure Key Vault for local development
             host = secret_client.get_secret("DB-HOST").value
             db_name = secret_client.get_secret("DATABASE-NAME").value
             user = secret_client.get_secret("DB-USER").value
             password = secret_client.get_secret("DB-PASSWORD").value
             port = secret_client.get_secret("DB-PORT").value
-        except Exception as e:
-            print(f"Failed to retrieve secrets from Key Vault: {str(e)}")
-            raise
 
         print("Retrieved connection details:")
         print(f"Host: {host}")
-        print(f"Database Name: {db_name}")  # Let's explicitly see the database name
+        print(f"Database Name: {db_name}")
         print(f"User: {user}")
         print(f"Port: {port}")
         
-        # Now try to connect
-        try:
-            conn = psycopg2.connect(
-                host=host,
-                database=db_name,
-                user=user,
-                password=password,
-                port=port
-            )
-            print("Connection successful!")
-            return conn
-        except psycopg2.Error as e:
-            print(f"PostgreSQL Error: {e.pgcode} - {e.pgerror}")
-            raise
-            
+        # Connect to database
+        conn = psycopg2.connect(
+            host=host,
+            database=db_name,
+            user=user,
+            password=password,
+            port=port
+        )
+        print("Connection successful!")
+        return conn
     except Exception as e:
         print(f"Connection error details: {type(e).__name__}: {str(e)}")
         raise ConnectionError(f"Failed to connect to database: {str(e)}") 
