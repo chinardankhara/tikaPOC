@@ -7,7 +7,7 @@ from services.chat_agent import ChatManager
 def initialize_session_state():
     """Initialize session state variables."""
     if "chat_manager" not in st.session_state:
-        st.session_state.chat_manager = ChatManager()
+        st.session_state.chat_manager = ChatManager(use_streamlit_secrets=True)
     if "messages" not in st.session_state:
         st.session_state.messages = []
 

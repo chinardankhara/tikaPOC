@@ -5,6 +5,7 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from .topic_agent import TopicAgent
 from pydantic import BaseModel
+import streamlit as st
 
 # Set up Key Vault client
 vault_url = "https://tikasecrets.vault.azure.net/"
@@ -16,15 +17,26 @@ class MessageClassification(BaseModel):
     redirect_message: str | None
 
 class ChatManager:
-    def __init__(self) -> None:
-        """Initialize chat manager with OpenAI client and topic agent."""
+    def __init__(self, use_streamlit_secrets=False) -> None:
+        """Initialize the chat manager with OpenAI client."""
+        # Get credentials from appropriate source
+        if use_streamlit_secrets:
+            # Use Streamlit secrets for cloud deployment
+            azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
+            api_key = st.secrets["AZURE_OPENAI_KEY"]
+            self.deployment = st.secrets["AZURE_OPENAI_DEPLOYMENT"]
+        else:
+            # Use Azure Key Vault for local development
+            azure_endpoint = secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value
+            api_key = secret_client.get_secret("AZURE-OPENAI-KEY").value
+            self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
+        
+        # Initialize OpenAI client
         self.client = AzureOpenAI(
-            azure_endpoint=secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value,
-            api_key=secret_client.get_secret("AZURE-OPENAI-KEY").value,
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
             api_version="2024-12-01-preview"
         )
-        self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
-        print(f"Using OpenAI deployment: {self.deployment}")
         self.topic_agent = TopicAgent()
         
     def _format_topics(self, topics: List[Dict[str, Any]]) -> str:

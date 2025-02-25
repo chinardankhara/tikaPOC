@@ -7,6 +7,7 @@ from .topic_search import TopicSearcher
 from dotenv import load_dotenv
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+import streamlit as st
 
 # Set up Key Vault client
 vault_url = "https://tikasecrets.vault.azure.net/"
@@ -20,16 +21,29 @@ class AgentState:
     recent_queries: Deque[str] = field(default_factory=lambda: deque(maxlen=5))
 
 class TopicAgent:
-    def __init__(self):
+    def __init__(self, use_streamlit_secrets=False):
         """Initialize the agent with necessary components."""
         self.state = AgentState()
         self.searcher = TopicSearcher()
+        
+        # Get credentials from appropriate source
+        if use_streamlit_secrets:
+            # Use Streamlit secrets for cloud deployment
+            azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
+            api_key = st.secrets["AZURE_OPENAI_KEY"]
+            self.deployment = st.secrets["AZURE_OPENAI_DEPLOYMENT"]
+        else:
+            # Use Azure Key Vault for local development
+            azure_endpoint = secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value
+            api_key = secret_client.get_secret("AZURE-OPENAI-KEY").value
+            self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
+        
+        # Initialize OpenAI client
         self.client = AzureOpenAI(
-            azure_endpoint=secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value,
-            api_key=secret_client.get_secret("AZURE-OPENAI-KEY").value,
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
             api_version="2024-12-01-preview"
         )
-        self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
         
     def _rewrite_query(self) -> str:
         """
