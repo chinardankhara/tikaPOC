@@ -11,10 +11,10 @@ from azure.keyvault.secrets import SecretClient
 import streamlit as st
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Set up Key Vault client
-vault_url = "https://tikasecrets.vault.azure.net/"
-credential = DefaultAzureCredential()
-secret_client = SecretClient(vault_url=vault_url, credential=credential)
+# Remove the global Secret Client initialization
+# vault_url = "https://tikasecrets.vault.azure.net/"
+# credential = DefaultAzureCredential()
+# secret_client = SecretClient(vault_url=vault_url, credential=credential)
 
 class TopicSearcher:
     def __init__(self, use_streamlit_secrets=False) -> None:
@@ -174,6 +174,10 @@ def get_db_connection(use_streamlit_secrets=False) -> connection:
             port = st.secrets["DB_PORT"]
         else:
             # Use Azure Key Vault for local development
+            vault_url = "https://tikasecrets.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            secret_client = SecretClient(vault_url=vault_url, credential=credential)
+            
             host = secret_client.get_secret("DB-HOST").value
             db_name = secret_client.get_secret("DATABASE-NAME").value
             user = secret_client.get_secret("DB-USER").value

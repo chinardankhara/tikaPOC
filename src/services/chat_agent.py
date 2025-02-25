@@ -7,11 +7,6 @@ from .topic_agent import TopicAgent
 from pydantic import BaseModel
 import streamlit as st
 
-# Set up Key Vault client
-vault_url = "https://tikasecrets.vault.azure.net/"
-credential = DefaultAzureCredential()
-secret_client = SecretClient(vault_url=vault_url, credential=credential)
-
 class MessageClassification(BaseModel):
     is_off_topic: bool
     redirect_message: str | None
@@ -27,6 +22,10 @@ class ChatManager:
             self.deployment = st.secrets["AZURE_OPENAI_DEPLOYMENT"]
         else:
             # Use Azure Key Vault for local development
+            vault_url = "https://tikasecrets.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            secret_client = SecretClient(vault_url=vault_url, credential=credential)
+            
             azure_endpoint = secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value
             api_key = secret_client.get_secret("AZURE-OPENAI-KEY").value
             self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value

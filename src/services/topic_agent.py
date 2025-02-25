@@ -9,11 +9,6 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 import streamlit as st
 
-# Set up Key Vault client
-vault_url = "https://tikasecrets.vault.azure.net/"
-credential = DefaultAzureCredential()
-secret_client = SecretClient(vault_url=vault_url, credential=credential)
-
 @dataclass
 class AgentState:
     """Maintains agent's memory of excluded topics and recent queries."""
@@ -24,7 +19,7 @@ class TopicAgent:
     def __init__(self, use_streamlit_secrets=False):
         """Initialize the agent with necessary components."""
         self.state = AgentState()
-        self.searcher = TopicSearcher()
+        self.searcher = TopicSearcher(use_streamlit_secrets=use_streamlit_secrets)
         
         # Get credentials from appropriate source
         if use_streamlit_secrets:
@@ -34,6 +29,10 @@ class TopicAgent:
             self.deployment = st.secrets["AZURE_OPENAI_DEPLOYMENT"]
         else:
             # Use Azure Key Vault for local development
+            vault_url = "https://tikasecrets.vault.azure.net/"
+            credential = DefaultAzureCredential()
+            secret_client = SecretClient(vault_url=vault_url, credential=credential)
+            
             azure_endpoint = secret_client.get_secret("AZURE-OPENAI-ENDPOINT").value
             api_key = secret_client.get_secret("AZURE-OPENAI-KEY").value
             self.deployment = secret_client.get_secret("AZURE-OPENAI-DEPLOYMENT").value
