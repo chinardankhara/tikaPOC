@@ -37,7 +37,9 @@ class ChatManager:
             api_key=api_key,
             api_version="2024-12-01-preview"
         )
-        self.topic_agent = TopicAgent()
+        
+        # Initialize topic agent with same authentication method
+        self.topic_agent = TopicAgent(use_streamlit_secrets=use_streamlit_secrets)
         
     def _format_topics(self, topics: List[Dict[str, Any]]) -> str:
         """Format topic results into a concise, Socratic dialogue."""
